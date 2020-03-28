@@ -22,7 +22,7 @@ def test_parse(sample):
         "gender": "female",
         "nationality": "USA",
         "dateOfBirth": "01/01/1990",
-        "passportNumber": 1234567,
+        "passportNumber": "1234567",
         "homeAddress": "123 USA, USA",
         "nepalAddress": "123 KATHAMANDU",
         "nepalPhone": {
