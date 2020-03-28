@@ -56,3 +56,4 @@ def test_parse(sample):
         "flightNumber": ""
     }
     assert parse(sample) == expect
+

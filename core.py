@@ -12,5 +12,6 @@ def overall_confidence(data):
 
 def scan():
     pass
+
 def parse(sample):
     pass
