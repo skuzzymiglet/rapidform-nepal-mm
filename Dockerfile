@@ -1,5 +1,10 @@
 FROM python:3
 
-ADD main.py /
+RUN pip3 install --no-cache-dir opencv-python
+RUN pip3 install --no-cache-dir matplotlib
 
-CMD [ "python", "./main.py" ]
+RUN mkdir /src
+WORKDIR /src
+ADD . /src
+
+CMD [ "python", "-u", "/src/main.py" ]
