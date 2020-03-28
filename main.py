@@ -27,6 +27,23 @@ def coordinatesForText(text, json):
 
     raise Exception("'%s' not found" % text)
 
+WORD_TO_IGNORE = "Nose" # HACK! so "No" doesn't match to "Nose"
+def allCoordinatesForText(text, json, matchOnPrefix=False): #matchOnPrefix is necessary because the vision API finds text like "NoD", which really is "No"
+    annotations = json["responses"][0]["textAnnotations"]
+    coordinates = []
+    
+    for annotation in annotations:
+        if "description" in annotation:
+            if annotation["description"].startswith(WORD_TO_IGNORE):
+                continue    
+
+            matches = annotation["description"].startswith(text) if matchOnPrefix else annotation["description"] == text
+            if matches:
+                coordinate = annotation["boundingPoly"]["vertices"][0]
+                coordinates.append((coordinate["x"], coordinate["y"]))
+    
+    return coordinates
+
 
 def alignImages(im1, im2, im1TextDetectionJsonPath, im2TextDetectionJsonPath):
     keypoints1 = featuresForImage(im1TextDetectionJsonPath)
@@ -71,18 +88,73 @@ def saveAlignedImage(imFilename, outFilename, textDetctionResultJsonPath):
     # Print estimated homography
     print("Estimated homography : \n",  h)
 
-def scan():
-    pass
-def parse():
-    pass
+CHECKBOX_LABELS = {
+    "Male": { "count": 1, "width": 47, "height": 23 },
+    "Female": { "count": 1, "width": 68, "height": 23 },
+    "Others": { "count": 1, "width": 61, "height": 23 },
+    "Yes": { "count": 13, "width": 38, "height": 22 },
+    "No": { "count": 11, "width": 27, "height": 22 },  # TODO this count should be 13, but Google vision isn't picking up the last 2. Maybe we can ignore finding "No" and just use offsets off of the "Yes" coordinates
+}
 
+GENDER_OPTIONS = ["Male", "Female", "Others"]
+
+def extractCheckboxes(alignedImageTextDetectionJsonPath):
+    with open(alignedImageTextDetectionJsonPath) as f:
+        checkboxTopLeftCoordinates = {}
+        data = json.load(f)
+        result = []
+        for label, labelDetails in CHECKBOX_LABELS.items():
+            coordinatesFound = allCoordinatesForText(label, data, True)
+            expectedCount = labelDetails["count"]
+            if len(coordinatesFound) != expectedCount:
+
+                # This is getting raised because the vision API is only finding 11 "No" labels.
+                raise Exception("Found %s instances of '%s' != %s expected) in %s" % (len(coordinatesFound), label, expectedCount, alignedImageTextDetectionJsonPath))
+            checkboxTopLeftCoordinates[label] = [ (c[0] + labelDetails["width"], c[1]) for c in coordinatesFound ]
+            
+        return checkboxTopLeftCoordinates
+
+CHECKBOX_CROP_WIDTH = 23
+CHECKBOX_CROP_HEIGHT = 21
+
+def compareCheckboxes(labelToCheckboxLoc, image):
+    for label, loc in labelToCheckboxLoc.items():
+        box = image[loc[0]:loc[0]+CHECKBOX_CROP_HEIGHT, loc[1]:loc[1]+CHECKBOX_CROP_WIDTH]
+        
+        # TODO determine which box has the most gray to determine which checkbox is checked
+        writeResult = cv2.imwrite("/src/out/"+label+".jpg", box) # Use this output to make sure we're looking at a checkbox
+
+    return None
+
+
+# TODO parameterize this with an image
+# And make this actually call the vision API
 def main():
-    imageToTransform = "/src/tests/assets/nepal2.jpg"
-    outFilename = "/src/out/aligned_nepal2.jpg"
-    textDetctionResultJson = "tests/assets/nepal2_text_detection.json"
+    imageToTransformPath = "/src/tests/assets/nepal2.jpg"
+    alignedImagePath = "/src/out/aligned_nepal2.jpg"
+    textDetctionResultJsonPath = "/src/tests/assets/nepal2_text_detection.json"
     saveAlignedImage(
-        imageToTransform, outFilename, textDetctionResultJson
+        imageToTransformPath, alignedImagePath, textDetctionResultJsonPath
     )
+
+    alignedImageTextDetectionResultJsonPath = "/src/tests/assets/aligned_nepal2_text_detection.json"
+    checkboxLocations = extractCheckboxes(alignedImageTextDetectionResultJsonPath)
+    
+    image = cv2.imread(alignedImagePath)
+    genderToCheckbox = dict([ [label, checkboxLocations[label][0]] for label in GENDER_OPTIONS ])
+    print(genderToCheckbox)
+    gender = compareCheckboxes(genderToCheckbox, image)
+    
+    print(gender)
+
+    # TODO process checkboxes for Yes/No questions after getting the last 2 coordinates for "No" (the google vision API finds 11)
+    # orderedYesLocations = sorted(checkboxLocations["Yes"], key=lambda loc: loc[1])
+    # orderedNoLocations = sorted(checkboxLocations["No"], key=lambda loc: loc[1])
+    # yesNoResults = []
+    # for i in range(len(orderedYesLocations)):
+    #     res = compareCheckboxes({ "Yes": orderedYesLocations[i], "No": orderedNoLocations[i] }, image)
+    #     yesNoResults += [res]
+    
 
 if __name__ == "__main__":
     main()
